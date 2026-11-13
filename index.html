@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Escuela Musical Clave de Copao · Secretaría</title>
+  
+  <!-- Tipografías oficiales del encargo: Fraunces (títulos/números) y Karla (texto) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Karla:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              navy: '#1F3A5F',     /* Azul tinta */
+              mustard: '#E2A93B',  /* Mostaza cálido */
+              cream: '#FBF5EE',    /* Fondo crema pergamino */
+              charcoal: '#27302F', /* Texto oscuro */
+              rust: '#B5453C',     /* Alerta / sin cupo */
+              paper: '#FFFFFF',
+              subtle: '#F0E8DC',
+              border: '#E6DCCF'
+            }
+          },
+          fontFamily: {
+            title: ['Fraunces', 'serif'],
+            body: ['Karla', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- React 18 & ReactDOM & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      background-color: #FBF5EE;
+      color: #27302F;
+      font-family: 'Karla', sans-serif;
+    }
+    h1, h2, h3, h4, .font-music {
+      font-family: 'Fraunces', serif;
+    }
+    
+    /* El auténtico pentagrama: 5 líneas finas de 1px con 5px de separación musical pura */
+    .stave-lines {
+      position: relative;
+      height: 25px;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(31, 58, 95, 0.16) 0px,
+        rgba(31, 58, 95, 0.16) 1px,
+        transparent 1px,
+        transparent 6px
+      );
+    }
+    
+    .stave-progress {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stave-navy {
+      background: repeating-linear-gradient(
+        to bottom,
+        #1F3A5F 0px,
+        #1F3A5F 1.6px,
+        transparent 1.6px,
+        transparent 6px
+      );
+    }
+
+    .stave-mustard {
+      background: repeating-linear-gradient(
+        to bottom,
+        #E2A93B 0px,
+        #E2A93B 1.6px,
+        transparent 1.6px,
+        transparent 6px
+      );
+    }
+
+    .stave-rust {
+      background: repeating-linear-gradient(
+        to bottom,
+        #B5453C 0px,
+        #B5453C 1.6px,
+        transparent 1.6px,
+        transparent 6px
+      );
+    }
+
+    /* Animación suave para modales y alertas */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .animate-modal {
+      animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  </style>
+</head>
+<body class="min-h-screen selection:bg-brand-mustard selection:text-brand-navy">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // ==========================================================================
+    // CONFIGURACIÓN OFICIAL DEL ENCARGO
+    // ==========================================================================
+    const CLAVE_PANEL = "copao2026";
+    const STORAGE_KEY = "clave_copao_alumnos_v1";
+    const SESSION_KEY = "clave_copao_auth";
+
+    const INSTRUMENTOS = [
+      { id: 'piano', nombre: 'Piano', cupo: 16, mensualidad: 58000 },
+      { id: 'guitarra', nombre: 'Guitarra', cupo: 20, mensualidad: 48000 },
+      { id: 'violin', nombre: 'Violín', cupo: 10, mensualidad: 62000 },
+      { id: 'bateria', nombre: 'Batería', cupo: 8, mensualidad: 55000 },
+      { id: 'canto', nombre: 'Canto', cupo: 12, mensualidad: 52000 },
+      { id: 'ukelele', nombre: 'Ukelele', cupo: 12, mensualidad: 42000 },
+      { id: 'flauta', nombre: 'Flauta traversa', cupo: 6, mensualidad: 60000 }
+    ];
+
+    const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+    // Slots exactos de 45 minutos según apertura
+    function getHorariosPorDia(dia) {
+      if (dia === 'Sábado') {
+        // Sábados de 9:30 a 13:30 (intervalos de 45 min)
+        return ['09:30', '10:15', '11:00', '11:45', '12:30'];
+      }
+      // Lunes a Viernes de 15:00 a 21:00
+      return ['15:00', '15:45', '16:30', '17:15', '18:00', '18:45', '19:30', '20:15'];
+    }
+
+    // Formateador oficial de Pesos Chilenos (CLP)
+    function formatCLP(amount) {
+      return '$ ' + Number(amount || 0).toLocaleString('es-CL');
+    }
+
+    // Cálculo exacto de edad
+    function calcularEdad(fechaNacStr) {
+      if (!fechaNacStr) return 0;
+      const partes = fechaNacStr.split('-').map(Number);
+      if (partes.length !== 3) return 0;
+      const [year, month, day] = partes;
+      const hoy = new Date();
+      let edad = hoy.getFullYear() - year;
+      const m = (hoy.getMonth() + 1) - month;
+      if (m < 0 || (m === 0 && hoy.getDate() < day)) {
+        edad--;
+      }
+      return edad;
+    }
+
+    // ==========================================================================
+    // SEMILLA EXACTA DE 30 ALUMNOS SINTÉTICOS (Requisitos de Kodarvia)
+    // - Batería 8 de 8 (100% llena)
+    // - Violín 8 de 10 (últimos 2 lugares)
+    // - Al menos 3 congelados y 2 retirados
+    // - Edades entre 7 y 54 años
+    // - Correo example.com
+    // ==========================================================================
+    const SEMILLA_INICIAL = [
+      // 8 de Batería (LLENA: 7 Activos, 1 Congelado)
+      { id: "copao-1", nombre: "Tomás", apellido: "Rivas", fechaNacimiento: "2017-04-12", adultoResponsable: "Carolina Rivas", correo: "tomas.rivas@example.com", instrumento: "Batería", dia: "Lunes", hora: "15:00", estado: "Activo", fechaAlta: "2026-03-02" },
+      { id: "copao-2", nombre: "Ignacia", apellido: "Morales", fechaNacimiento: "2012-08-25", adultoResponsable: "Rodrigo Morales", correo: "ignacia.morales@example.com", instrumento: "Batería", dia: "Lunes", hora: "15:45", estado: "Activo", fechaAlta: "2026-03-02" },
+      { id: "copao-3", nombre: "Benjamín", apellido: "Soto", fechaNacimiento: "2009-02-18", adultoResponsable: "Paula Soto", correo: "benjamin.soto@example.com", instrumento: "Batería", dia: "Martes", hora: "16:30", estado: "Activo", fechaAlta: "2026-03-03" },
+      { id: "copao-4", nombre: "Rocío", apellido: "Fuentes", fechaNacimiento: "2003-11-10", adultoResponsable: null, correo: "rocio.fuentes@example.com", instrumento: "Batería", dia: "Martes", hora: "18:00", estado: "Activo", fechaAlta: "2026-03-03" },
+      { id: "copao-5", nombre: "Matías", apellido: "Paredes", fechaNacimiento: "1995-07-14", adultoResponsable: null, correo: "matias.paredes@example.com", instrumento: "Batería", dia: "Miércoles", hora: "19:30", estado: "Congelado", fechaAlta: "2026-03-04" },
+      { id: "copao-6", nombre: "Camila", apellido: "Henríquez", fechaNacimiento: "2014-06-03", adultoResponsable: "Andrés Henríquez", correo: "camila.henriquez@example.com", instrumento: "Batería", dia: "Jueves", hora: "15:00", estado: "Activo", fechaAlta: "2026-03-05" },
+      { id: "copao-7", nombre: "Diego", apellido: "Contreras", fechaNacimiento: "1984-09-29", adultoResponsable: null, correo: "diego.contreras@example.com", instrumento: "Batería", dia: "Viernes", hora: "20:15", estado: "Activo", fechaAlta: "2026-03-06" },
+      { id: "copao-8", nombre: "Antonia", apellido: "Vergara", fechaNacimiento: "2007-01-15", adultoResponsable: null, correo: "antonia.vergara@example.com", instrumento: "Batería", dia: "Sábado", hora: "09:30", estado: "Activo", fechaAlta: "2026-03-07" },
+
+      // 8 de Violín (8 de 10)
+      { id: "copao-9", nombre: "Florencia", apellido: "Araya", fechaNacimiento: "2018-05-20", adultoResponsable: "Verónica Araya", correo: "florencia.araya@example.com", instrumento: "Violín", dia: "Lunes", hora: "16:30", estado: "Activo", fechaAlta: "2026-03-09" },
+      { id: "copao-10", nombre: "Joaquín", apellido: "Pizarro", fechaNacimiento: "2015-10-12", adultoResponsable: "Marcelo Pizarro", correo: "joaquin.pizarro@example.com", instrumento: "Violín", dia: "Martes", hora: "15:00", estado: "Activo", fechaAlta: "2026-03-10" },
+      { id: "copao-11", nombre: "Valentina", apellido: "Saavedra", fechaNacimiento: "2010-03-08", adultoResponsable: "Daniela Saavedra", correo: "valentina.saavedra@example.com", instrumento: "Violín", dia: "Miércoles", hora: "15:45", estado: "Activo", fechaAlta: "2026-03-11" },
+      { id: "copao-12", nombre: "Sebastián", apellido: "Lagos", fechaNacimiento: "1999-12-04", adultoResponsable: null, correo: "sebastian.lagos@example.com", instrumento: "Violín", dia: "Miércoles", hora: "18:45", estado: "Activo", fechaAlta: "2026-03-11" },
+      { id: "copao-13", nombre: "Martina", apellido: "Navarro", fechaNacimiento: "1991-04-17", adultoResponsable: null, correo: "martina.navarro@example.com", instrumento: "Violín", dia: "Jueves", hora: "17:15", estado: "Activo", fechaAlta: "2026-03-12" },
+      { id: "copao-14", nombre: "Lucas", apellido: "Bravo", fechaNacimiento: "2013-09-02", adultoResponsable: "Claudio Bravo", correo: "lucas.bravo@example.com", instrumento: "Violín", dia: "Viernes", hora: "15:00", estado: "Activo", fechaAlta: "2026-03-13" },
+      { id: "copao-15", nombre: "Josefa", apellido: "Cárcamo", fechaNacimiento: "1978-02-14", adultoResponsable: null, correo: "josefa.carcamo@example.com", instrumento: "Violín", dia: "Sábado", hora: "10:15", estado: "Activo", fechaAlta: "2026-03-14" },
+      { id: "copao-16", nombre: "Agustín", apellido: "Toro", fechaNacimiento: "2016-07-22", adultoResponsable: "Loreto Toro", correo: "agustin.toro@example.com", instrumento: "Violín", dia: "Sábado", hora: "11:00", estado: "Activo", fechaAlta: "2026-03-14" },
+
+      // Piano (5 alumnos: 3 activos, 1 congelado, 1 retirado)
+      { id: "copao-17", nombre: "Emilia", apellido: "Riquelme", fechaNacimiento: "2019-01-30", adultoResponsable: "Gonzalo Riquelme", correo: "emilia.riquelme@example.com", instrumento: "Piano", dia: "Lunes", hora: "17:15", estado: "Activo", fechaAlta: "2026-03-16" },
+      { id: "copao-18", nombre: "Vicente", apellido: "Espinoza", fechaNacimiento: "2011-11-05", adultoResponsable: "Camila Espinoza", correo: "vicente.espinoza@example.com", instrumento: "Piano", dia: "Martes", hora: "19:30", estado: "Congelado", fechaAlta: "2026-03-17" },
+      { id: "copao-19", nombre: "Catalina", apellido: "Muñoz", fechaNacimiento: "1997-08-19", adultoResponsable: null, correo: "catalina.munoz@example.com", instrumento: "Piano", dia: "Jueves", hora: "18:45", estado: "Activo", fechaAlta: "2026-03-19" },
+      { id: "copao-20", nombre: "Felipe", apellido: "Gallardo", fechaNacimiento: "1972-03-15", adultoResponsable: null, correo: "felipe.gallardo@example.com", instrumento: "Piano", dia: "Viernes", hora: "17:15", estado: "Retirado", fechaAlta: "2026-03-20" },
+      { id: "copao-21", nombre: "Isidora", apellido: "Sepúlveda", fechaNacimiento: "2005-06-27", adultoResponsable: null, correo: "isidora.sepulveda@example.com", instrumento: "Piano", dia: "Sábado", hora: "11:45", estado: "Activo", fechaAlta: "2026-03-21" },
+
+      // Guitarra (4 alumnos: 3 activos, 1 retirado)
+      { id: "copao-22", nombre: "Maximiliano", apellido: "Rojas", fechaNacimiento: "2008-12-11", adultoResponsable: null, correo: "maximiliano.rojas@example.com", instrumento: "Guitarra", dia: "Lunes", hora: "19:30", estado: "Activo", fechaAlta: "2026-03-23" },
+      { id: "copao-23", nombre: "Trinidad", apellido: "Castillo", fechaNacimiento: "1993-05-18", adultoResponsable: null, correo: "trinidad.castillo@example.com", instrumento: "Guitarra", dia: "Martes", hora: "20:15", estado: "Retirado", fechaAlta: "2026-03-24" },
+      { id: "copao-24", nombre: "Gaspar", apellido: "Figueroa", fechaNacimiento: "2014-02-09", adultoResponsable: "Javier Figueroa", correo: "gaspar.figueroa@example.com", instrumento: "Guitarra", dia: "Miércoles", hora: "16:30", estado: "Activo", fechaAlta: "2026-03-25" },
+      { id: "copao-25", nombre: "Renata", apellido: "Olivares", fechaNacimiento: "1986-10-31", adultoResponsable: null, correo: "renata.olivares@example.com", instrumento: "Guitarra", dia: "Jueves", hora: "20:15", estado: "Activo", fechaAlta: "2026-03-26" },
+
+      // Canto (2 alumnos: 1 activo, 1 congelado)
+      { id: "copao-26", nombre: "Amanda", apellido: "Quiroz", fechaNacimiento: "2001-09-14", adultoResponsable: null, correo: "amanda.quiroz@example.com", instrumento: "Canto", dia: "Miércoles", hora: "17:15", estado: "Congelado", fechaAlta: "2026-03-25" },
+      { id: "copao-27", nombre: "Cristóbal", apellido: "Valdés", fechaNacimiento: "1981-04-03", adultoResponsable: null, correo: "cristobal.valdes@example.com", instrumento: "Canto", dia: "Viernes", hora: "18:45", estado: "Activo", fechaAlta: "2026-03-27" },
+
+      // Ukelele (2 alumnos activos)
+      { id: "copao-28", nombre: "Julieta", apellido: "Carrasco", fechaNacimiento: "2017-08-08", adultoResponsable: "Patricia Carrasco", correo: "julieta.carrasco@example.com", instrumento: "Ukelele", dia: "Sábado", hora: "12:30", estado: "Activo", fechaAlta: "2026-03-28" },
+      { id: "copao-29", nombre: "Alonso", apellido: "Peña", fechaNacimiento: "1989-11-23", adultoResponsable: null, correo: "alonso.pena@example.com", instrumento: "Ukelele", dia: "Jueves", hora: "16:30", estado: "Activo", fechaAlta: "2026-03-26" },
+
+      // Flauta traversa (1 alumno activo)
+      { id: "copao-30", nombre: "Sofía", apellido: "Medina", fechaNacimiento: "2006-03-12", adultoResponsable: null, correo: "sofia.medina@example.com", instrumento: "Flauta traversa", dia: "Martes", hora: "17:15", estado: "Activo", fechaAlta: "2026-03-24" }
+    ];
+
+    // ==========================================================================
+    // COMPONENTE PRINCIPAL
+    // ==========================================================================
+    function App() {
+      // Estado de autenticación
+      const [autenticado, setAutenticado] = useState(() => {
+        return sessionStorage.getItem(SESSION_KEY) === "true";
+      });
+
+      // Pestaña activa: 'panel' | 'alumnos' | 'formulario'
+      const [vista, setVista] = useState('panel');
+
+      // Alumnos y persistencia
+      const [alumnos, setAlumnos] = useState([]);
+      const [alumnoEditando, setAlumnoEditando] = useState(null);
+
+      // Modales y avisos
+      const [modalRestaurar, setModalRestaurar] = useState(false);
+      const [modalBorrar, setModalBorrar] = useState(null);
+      const [toast, setToast] = useState(null);
+
+      // Carga inicial estricta según el briefing:
+      // "Al iniciar, cargá la semilla solo si NO existe la clave propia de esta aplicación.
+      // Una lista guardada vacía no equivale a una primera visita."
+      useEffect(() => {
+        const guardado = localStorage.getItem(STORAGE_KEY);
+        if (guardado === null) {
+          // Primera visita absoluta
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(SEMILLA_INICIAL));
+          setAlumnos(SEMILLA_INICIAL);
+        } else {
+          try {
+            const parsed = JSON.parse(guardado);
+            setAlumnos(Array.isArray(parsed) ? parsed : []);
+          } catch (e) {
+            setAlumnos([]);
+          }
+        }
+      }, []);
+
+      // Re-render de iconos de Lucide al cambiar vista
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      // Mensajes Toast temporales
+      function showToast(mensaje, tipo = 'success') {
+        setToast({ mensaje, tipo });
+        setTimeout(() => setToast(null), 3500);
+      }
+
+      // Guardar en LocalStorage con verificación de fallo
+      function guardarAlumnos(nuevaLista) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nuevaLista));
+          setAlumnos(nuevaLista);
+          return true;
+        } catch (error) {
+          showToast("Error de almacenamiento local. No se pudieron guardar los cambios.", "error");
+          return false;
+        }
+      }
+
+      // Login
+      function handleLogin(claveInput) {
+        if (claveInput === CLAVE_PANEL) {
+          sessionStorage.setItem(SESSION_KEY, "true");
+          setAutenticado(true);
+          showToast("Bienvenida a la secretaría");
+        } else {
+          showToast("Clave incorrecta. Pista: " + CLAVE_PANEL, "error");
+        }
+      }
+
+      function handleLogout() {
+        sessionStorage.removeItem(SESSION_KEY);
+        setAutenticado(false);
+      }
+
+      // Restaurar datos de ejemplo
+      function ejecutarRestauracion() {
+        if (guardarAlumnos(SEMILLA_INICIAL)) {
+          setModalRestaurar(false);
+          showToast("Datos de ejemplo restaurados (30 fichas)");
+          setVista('panel');
+        }
+      }
+
+      // Borrar alumno
+      function confirmarBorrado() {
+        if (!modalBorrar) return;
+        const filtrados = alumnos.filter(a => a.id !== modalBorrar.id);
+        if (guardarAlumnos(filtrados)) {
+          showToast(`Ficha de ${modalBorrar.nombre} ${modalBorrar.apellido} eliminada (plaza liberada)`);
+          setModalBorrar(null);
+        }
+      }
+
+      // LÓGICA DE NEGOCIO: Cupos e Ingreso
+      // "El cupo libre se calcula como cupo total menos activos y congelados.
+      // Retirado libera el lugar.
+      // El ingreso mensual suma SOLO activos."
+      const metricasCupos = useMemo(() => {
+        return INSTRUMENTOS.map(inst => {
+          const inscritos = alumnos.filter(a => a.instrumento === inst.nombre && (a.estado === 'Activo' || a.estado === 'Congelado'));
+          const ocupados = inscritos.length;
+          const libres = Math.max(0, inst.cupo - ocupados);
+          const lleno = libres === 0;
+          const ultimos = !lleno && libres <= 3;
+          return {
+            ...inst,
+            ocupados,
+            libres,
+            lleno,
+            ultimos,
+            porcentaje: Math.min(100, (ocupados / inst.cupo) * 100)
+          };
+        });
+      }, [alumnos]);
+
+      const ingresoMensualEstimado = useMemo(() => {
+        return alumnos
+          .filter(a => a.estado === 'Activo')
+          .reduce((sum, alumno) => {
+            const inst = INSTRUMENTOS.find(i => i.nombre === alumno.instrumento);
+            return sum + (inst ? inst.mensualidad : 0);
+          }, 0);
+      }, [alumnos]);
+
+      const totalActivos = useMemo(() => alumnos.filter(a => a.estado === 'Activo').length, [alumnos]);
+      const totalCongelados = useMemo(() => alumnos.filter(a => a.estado === 'Congelado').length, [alumnos]);
+      const totalRetirados = useMemo(() => alumnos.filter(a => a.estado === 'Retirado').length, [alumnos]);
+
+      // Si no está autenticado, mostramos pantalla de acceso
+      if (!autenticado) {
+        return <PantallaAcceso onLogin={handleLogin} />;
+      }
+
+      return (
+        <div className="min-h-screen flex flex-col bg-brand-cream text-brand-charcoal">
+          
+          {/* BARRA SUPERIOR / CABECERA DE SECRETARÍA */}
+          <header className="border-b border-brand-border bg-brand-paper/90 backdrop-blur sticky top-0 z-30 shadow-xs">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+              
+              {/* Logo / Nombre */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-brand-navy text-brand-mustard flex items-center justify-center font-music text-xl font-bold border border-brand-mustard/30 shadow-inner">
+                  𝄞
+                </div>
+                <div>
+                  <h1 className="font-music font-bold text-lg leading-tight text-brand-navy">
+                    Clave de Copao
+                  </h1>
+                  <p className="text-xs text-brand-charcoal/60 tracking-wide">
+                    Secretaría Musical · La Serena, Chile
+                  </p>
+                </div>
+              </div>
+
+              {/* Navegación */}
+              <nav className="flex items-center gap-1 sm:gap-2">
+                <button
+                  onClick={() => setVista('panel')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    vista === 'panel'
+                      ? 'bg-brand-navy text-brand-paper shadow-sm'
+                      : 'text-brand-charcoal hover:bg-brand-subtle'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <i data-lucide="layout-grid" className="w-4 h-4"></i>
+                    <span>Cupos</span>
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setVista('alumnos')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    vista === 'alumnos'
+                      ? 'bg-brand-navy text-brand-paper shadow-sm'
+                      : 'text-brand-charcoal hover:bg-brand-subtle'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <i data-lucide="users" className="w-4 h-4"></i>
+                    <span>Alumnos</span>
+                    <span className="ml-1 px-1.5 py-0.2 text-xs rounded-full bg-brand-border text-brand-navy font-bold">
+                      {alumnos.length}
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => { setAlumnoEditando(null); setVista('formulario'); }}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-mustard text-brand-navy hover:brightness-105 shadow-sm transition"
+                >
+                  <i data-lucide="plus" className="w-4 h-4"></i>
+                  <span>Nuevo Alumno</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  title="Cerrar sesión"
+                  className="p-2 rounded-lg text-brand-charcoal/60 hover:text-brand-rust hover:bg-brand-subtle transition ml-1"
+                >
+                  <i data-lucide="log-out" className="w-4 h-4"></i>
+                </button>
+              </nav>
+
+            </div>
+          </header>
+
+          {/* CONTENIDO PRINCIPAL */}
+          <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20">
+            {vista === 'panel' && (
+              <VistaPanel
+                metricas={metricasCupos}
+                ingresoTotal={ingresoMensualEstimado}
+                activos={totalActivos}
+                congelados={totalCongelados}
+                retirados={totalRetirados}
+                onNuevo={() => { setAlumnoEditando(null); setVista('formulario'); }}
+                onRestaurar={() => setModalRestaurar(true)}
+              />
+            )}
+
+            {vista === 'alumnos' && (
+              <VistaAlumnos
+                alumnos={alumnos}
+                onNuevo={() => { setAlumnoEditando(null); setVista('formulario'); }}
+                onEditar={(alum) => { setAlumnoEditando(alum); setVista('formulario'); }}
+                onBorrar={(alum) => setModalBorrar(alum)}
+                onCambiarEstado={(alumno, nuevoEstado) => {
+                  // Comprobar si reactivar no viola el cupo
+                  if (nuevoEstado === 'Activo' || nuevoEstado === 'Congelado') {
+                    const inst = INSTRUMENTOS.find(i => i.nombre === alumno.instrumento);
+                    const ocupados = alumnos.filter(a => a.instrumento === alumno.instrumento && a.id !== alumno.id && (a.estado === 'Activo' || a.estado === 'Congelado')).length;
+                    if (inst && ocupados >= inst.cupo) {
+                      showToast(`No se puede activar: ${alumno.instrumento} no tiene cupo disponible.`, "error");
+                      return;
+                    }
+                  }
+                  const actualizados = alumnos.map(a => a.id === alumno.id ? { ...a, estado: nuevoEstado } : a);
+                  if (guardarAlumnos(actualizados)) {
+                    showToast(`Estado de ${alumno.nombre} cambiado a ${nuevoEstado}`);
+                  }
+                }}
+              />
+            )}
+
+            {vista === 'formulario' && (
+              <VistaFormulario
+                alumnoEditando={alumnoEditando}
+                alumnosExistentes={alumnos}
+                onGuardar={(alumnoData) => {
+                  let nuevaLista;
+                  if (alumnoEditando) {
+                    nuevaLista = alumnos.map(a => a.id === alumnoEditando.id ? { ...a, ...alumnoData } : a);
+                    showToast(`Ficha de ${alumnoData.nombre} ${alumnoData.apellido} actualizada`);
+                  } else {
+                    const nuevo = {
+                      ...alumnoData,
+                      id: "copao-" + Date.now(),
+                      fechaAlta: new Date().toISOString().split('T')[0]
+                    };
+                    nuevaLista = [nuevo, ...alumnos];
+                    showToast(`¡Alumno ${alumnoData.nombre} dado de alta con éxito!`);
+                  }
+                  if (guardarAlumnos(nuevaLista)) {
+                    setVista('alumnos');
+                  }
+                }}
+                onCancelar={() => setVista(alumnoEditando ? 'alumnos' : 'panel')}
+              />
+            )}
+          </main>
+
+          {/* BOTÓN FLOTANTE MÓVIL PARA NUEVO ALUMNO */}
+          {vista !== 'formulario' && (
+            <div className="sm:hidden fixed bottom-5 right-5 z-20">
+              <button
+                onClick={() => { setAlumnoEditando(null); setVista('formulario'); }}
+                className="w-14 h-14 rounded-full bg-brand-mustard text-brand-navy shadow-lg flex items-center justify-center font-bold text-2xl border-2 border-brand-navy active:scale-95 transition"
+              >
+                <i data-lucide="plus" className="w-6 h-6"></i>
+              </button>
+            </div>
+          )}
+
+          {/* MODAL DE CONFIRMACIÓN: RESTAURAR SEMILLA */}
+          {modalRestaurar && (
+            <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <div className="bg-brand-paper rounded-2xl max-w-md w-full p-6 border border-brand-border shadow-xl animate-modal space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-mustard/20 text-brand-mustard flex items-center justify-center font-bold">
+                  <i data-lucide="refresh-cw" className="w-6 h-6"></i>
+                </div>
+                <h3 className="font-music text-xl font-bold text-brand-navy">
+                  ¿Restaurar los datos de ejemplo?
+                </h3>
+                <p className="text-sm text-brand-charcoal/80 leading-relaxed">
+                  Se reemplazarán todas las fichas actuales por las <strong>30 fichas sintéticas originales</strong> (Batería 8 de 8 llena, Violín 8 de 10, congelados y retirados). Esta acción no se puede deshacer.
+                </p>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setModalRestaurar(false)}
+                    className="px-4 py-2 text-sm font-medium text-brand-charcoal/70 hover:bg-brand-subtle rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={ejecutarRestauracion}
+                    className="px-4 py-2 text-sm font-semibold bg-brand-navy text-brand-paper rounded-lg hover:bg-brand-navy/90"
+                  >
+                    Restaurar datos
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL DE CONFIRMACIÓN: BORRAR FICHA */}
+          {modalBorrar && (
+            <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <div className="bg-brand-paper rounded-2xl max-w-md w-full p-6 border border-brand-border shadow-xl animate-modal space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-rust/10 text-brand-rust flex items-center justify-center font-bold">
+                  <i data-lucide="trash-2" className="w-6 h-6"></i>
+                </div>
+                <h3 className="font-music text-xl font-bold text-brand-navy">
+                  ¿Eliminar ficha de alumno?
+                </h3>
+                <p className="text-sm text-brand-charcoal/80 leading-relaxed">
+                  Vas a eliminar la ficha de <strong>{modalBorrar.nombre} {modalBorrar.apellido}</strong> ({modalBorrar.instrumento}). Esta acción libera su lugar en el instrumento de inmediato.
+                </p>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setModalBorrar(null)}
+                    className="px-4 py-2 text-sm font-medium text-brand-charcoal/70 hover:bg-brand-subtle rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarBorrado}
+                    className="px-4 py-2 text-sm font-semibold bg-brand-rust text-white rounded-lg hover:brightness-110"
+                  >
+                    Sí, eliminar ficha
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TOAST FLOTANTE */}
+          {toast && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-modal">
+              <div className={`px-4 py-2.5 rounded-xl shadow-lg border text-sm font-medium flex items-center gap-2 ${
+                toast.tipo === 'error'
+                  ? 'bg-brand-rust text-white border-brand-rust/30'
+                  : 'bg-brand-navy text-brand-paper border-brand-navy/30'
+              }`}>
+                <i data-lucide={toast.tipo === 'error' ? 'alert-triangle' : 'check-circle'} className="w-4 h-4"></i>
+                <span>{toast.mensaje}</span>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // ==========================================================================
+    // PANTALLA 1: ACCESO CON CLAVE SIMPLE
+    // ==========================================================================
+    function PantallaAcceso({ onLogin }) {
+      const [clave, setClave] = useState("");
+
+      function handleSubmit(e) {
+        e.preventDefault();
+        onLogin(clave.trim());
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-brand-cream">
+          <div className="w-full max-w-sm bg-brand-paper rounded-2xl border border-brand-border p-8 shadow-md text-center space-y-6">
+            
+            {/* Cabecera musical */}
+            <div className="w-16 h-16 rounded-full bg-brand-navy text-brand-mustard mx-auto flex items-center justify-center font-music text-3xl font-bold border-2 border-brand-mustard/40 shadow-inner">
+              𝄞
+            </div>
+            
+            <div>
+              <h2 className="font-music font-bold text-2xl text-brand-navy">
+                Clave de Copao
+              </h2>
+              <p className="text-sm text-brand-charcoal/70 mt-1">
+                Panel de Secretaría Musical
+              </p>
+            </div>
+
+            <div className="stave-lines opacity-40 my-3"></div>
+
+            <form onSubmit={handleSubmit} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-brand-charcoal/70 mb-1.5">
+                  Clave del panel
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    autoFocus
+                    required
+                    value={clave}
+                    onChange={(e) => setClave(e.target.value)}
+                    placeholder="Escribe la clave de acceso…"
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-brand-border bg-brand-cream/40 focus:outline-none focus:ring-2 focus:ring-brand-mustard text-brand-charcoal text-sm"
+                  />
+                </div>
+                <p className="text-xs text-brand-charcoal/50 mt-1.5">
+                  Clave predefinida en código: <code className="bg-brand-subtle px-1.5 py-0.5 rounded text-brand-navy font-bold">{CLAVE_PANEL}</code>
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-lg bg-brand-navy text-brand-paper font-semibold text-sm hover:brightness-110 active:scale-98 transition shadow-sm flex items-center justify-center gap-2"
+              >
+                <span>Entrar a la secretaría</span>
+                <i data-lucide="arrow-right" className="w-4 h-4"></i>
+              </button>
+            </form>
+
+            <p className="text-xs text-brand-charcoal/40 italic">
+              Acceso local seguro sin verificación de identidad externa
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================================================
+    // PANTALLA 2: PANEL DE CUPOS (DASHBOARD)
+    // ==========================================================================
+    function VistaPanel({ metricas, ingresoTotal, activos, congelados, retirados, onNuevo, onRestaurar }) {
+      return (
+        <div className="space-y-6">
+
+          {/* TARJETA PRINCIPAL: INGRESO ESTIMADO Y RESUMEN */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* Facturación mensual estimada */}
+            <div className="md:col-span-2 bg-brand-paper rounded-2xl p-6 border border-brand-border shadow-xs flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-brand-navy/60">
+                  Ingreso Mensual Estimado
+                </span>
+                <div className="font-music font-bold text-3xl sm:text-4xl text-brand-navy mt-1">
+                  {formatCLP(ingresoTotal)}
+                </div>
+                <p className="text-xs text-brand-charcoal/60 mt-1.5">
+                  Calculado exclusivamente sobre los <strong>{activos} alumnos activos</strong>. Los alumnos congelados ocupan cupo pero aportan $ 0 durante su pausa.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-brand-border/60 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-navy"></span>
+                  <span><strong>{activos}</strong> Activos</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-mustard"></span>
+                  <span><strong>{congelados}</strong> Congelados (plaza reservada)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-charcoal/30"></span>
+                  <span><strong>{retirados}</strong> Retirados</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Acción Rápida: Nuevo alumno y estado */}
+            <div className="bg-brand-navy text-brand-paper rounded-2xl p-6 border border-brand-navy shadow-xs flex flex-col justify-between">
+              <div>
+                <h3 className="font-music text-lg font-bold text-brand-mustard">
+                  Inscripciones 2026
+                </h3>
+                <p className="text-xs text-brand-paper/80 mt-1.5 leading-relaxed">
+                  Las barras de cupo se actualizan al instante al dar altas, bajas o congelamientos.
+                </p>
+              </div>
+
+              <div className="space-y-2 mt-4">
+                <button
+                  onClick={onNuevo}
+                  className="w-full py-2.5 px-4 rounded-xl bg-brand-mustard text-brand-navy font-bold text-sm hover:brightness-105 active:scale-98 transition flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <i data-lucide="user-plus" className="w-4 h-4"></i>
+                  <span>Inscribir nuevo alumno</span>
+                </button>
+                
+                <button
+                  onClick={onRestaurar}
+                  className="w-full py-1.5 px-3 rounded-lg text-xs text-brand-paper/70 hover:text-brand-paper hover:bg-brand-paper/10 transition flex items-center justify-center gap-1.5"
+                >
+                  <i data-lucide="rotate-ccw" className="w-3.5 h-3.5"></i>
+                  <span>Restablecer datos de ejemplo</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          {/* BARRAS DE CUPO POR INSTRUMENTO (Estilo Pentagrama) */}
+          <div className="bg-brand-paper rounded-2xl p-6 border border-brand-border shadow-xs space-y-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-brand-border/60 pb-4">
+              <div>
+                <h2 className="font-music font-bold text-xl text-brand-navy">
+                  Cupos por Instrumento
+                </h2>
+                <p className="text-xs text-brand-charcoal/60 mt-0.5">
+                  Visualización de vacantes en tiempo real con líneas de pentagrama musical
+                </p>
+              </div>
+              <span className="text-xs text-brand-charcoal/50 italic">
+                Clases de 45 min · 1 vez/semana
+              </span>
+            </div>
+
+            <div className="space-y-5">
+              {metricas.map(inst => (
+                <div key={inst.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    
+                    {/* Nombre del instrumento y precio */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-brand-navy text-base">{inst.nombre}</span>
+                      <span className="text-xs text-brand-charcoal/50">({formatCLP(inst.mensualidad)}/mes)</span>
+                    </div>
+
+                    {/* Estado del cupo */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-music font-semibold text-brand-charcoal">
+                        {inst.ocupados} de {inst.cupo}
+                      </span>
+
+                      {inst.lleno ? (
+                        <span className="px-2 py-0.5 rounded font-bold bg-brand-rust text-white text-xs flex items-center gap-1">
+                          <i data-lucide="lock" className="w-3 h-3"></i>
+                          Sin cupo
+                        </span>
+                      ) : inst.ultimos ? (
+                        <span className="px-2 py-0.5 rounded font-bold bg-brand-mustard text-brand-navy text-xs">
+                          Últimos {inst.libres} lugares
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded font-medium bg-brand-subtle text-brand-navy text-xs">
+                          Quedan {inst.libres} lugares
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pentagrama con compases musicales individuales (líneas divisorias por vacante) */}
+                  <div className="stave-lines my-2.5 flex w-full border-l-2 border-brand-navy/30 border-r-2 border-brand-navy/30">
+                    {Array.from({ length: inst.cupo }).map((_, idx) => {
+                      const ocupado = idx < inst.ocupados;
+                      return (
+                        <div
+                          key={idx}
+                          className={`relative h-full flex-1 border-r border-brand-navy/20 last:border-r-0 transition-colors duration-200 ${
+                            ocupado
+                              ? inst.lleno
+                                ? 'stave-rust'
+                                : inst.ultimos
+                                  ? 'stave-mustard'
+                                  : 'stave-navy'
+                              : 'hover:bg-brand-navy/5'
+                          }`}
+                          title={`Compás ${idx + 1} de ${inst.cupo}: ${ocupado ? 'Plaza ocupada' : 'Vacante disponible'}`}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Frase simple orientativa para secretaría */}
+                  <div className="text-[11px] text-brand-charcoal/60 flex justify-between">
+                    <span>
+                      {inst.lleno
+                        ? 'No se admiten nuevas altas activas'
+                        : inst.libres === 1
+                          ? 'Solo queda 1 vacante disponible'
+                          : `Disponibles ${inst.libres} lugares para inscripción`}
+                    </span>
+                    <span className="italic">
+                      {inst.ocupados} inscritos (activos + congelados)
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    // ==========================================================================
+    // PANTALLA 3: LISTADO DE ALUMNOS (Buscador y filtros combinables)
+    // ==========================================================================
+    function VistaAlumnos({ alumnos, onNuevo, onEditar, onBorrar, onCambiarEstado }) {
+      const [busqueda, setBusqueda] = useState("");
+      const [filtroInstrumento, setFiltroInstrumento] = useState("todos");
+      const [filtroEstado, setFiltroEstado] = useState("todos");
+
+      // Filtrado conjunto: buscador + instrumento + estado
+      const filtrados = useMemo(() => {
+        const query = busqueda.trim().toLowerCase();
+        return alumnos.filter(a => {
+          const coincideTexto = !query ||
+            a.nombre.toLowerCase().includes(query) ||
+            a.apellido.toLowerCase().includes(query) ||
+            (a.correo && a.correo.toLowerCase().includes(query));
+          
+          const coincideInstrumento = filtroInstrumento === "todos" || a.instrumento === filtroInstrumento;
+          const coincideEstado = filtroEstado === "todos" || a.estado === filtroEstado;
+
+          return coincideTexto && coincideInstrumento && coincideEstado;
+        });
+      }, [alumnos, busqueda, filtroInstrumento, filtroEstado]);
+
+      return (
+        <div className="space-y-4">
+          
+          {/* Cabecera de la sección */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
+            <div>
+              <h2 className="font-music font-bold text-2xl text-brand-navy">
+                Fichas de Alumnos
+              </h2>
+              <p className="text-xs text-brand-charcoal/60">
+                Mostrando {filtrados.length} de {alumnos.length} alumnos registrados
+              </p>
+            </div>
+          </div>
+
+          {/* BARRA DE BÚSQUEDA Y FILTROS COMBINABLES */}
+          <div className="bg-brand-paper rounded-xl p-3.5 border border-brand-border shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-3">
+            
+            {/* Buscador */}
+            <div className="relative">
+              <i data-lucide="search" className="w-4 h-4 text-brand-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre, apellido o correo…"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard text-brand-charcoal"
+              />
+            </div>
+
+            {/* Filtro por Instrumento */}
+            <div>
+              <select
+                value={filtroInstrumento}
+                onChange={(e) => setFiltroInstrumento(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard text-brand-charcoal"
+              >
+                <option value="todos">Todos los instrumentos ({alumnos.length})</option>
+                {INSTRUMENTOS.map(i => (
+                  <option key={i.id} value={i.nombre}>
+                    {i.nombre} ({alumnos.filter(a => a.instrumento === i.nombre).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro por Estado */}
+            <div>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard text-brand-charcoal"
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="Activo">Solo Activos</option>
+                <option value="Congelado">Solo Congelados</option>
+                <option value="Retirado">Solo Retirados</option>
+              </select>
+            </div>
+
+          </div>
+
+          {/* LISTA DE ALUMNOS / ESTADO VACÍO */}
+          {alumnos.length === 0 ? (
+            <div className="bg-brand-paper rounded-2xl p-12 border border-brand-border text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-brand-subtle text-brand-navy/50 mx-auto flex items-center justify-center font-music text-xl">
+                𝄞
+              </div>
+              <h3 className="font-music font-bold text-lg text-brand-navy">
+                Todavía no hay alumnos cargados
+              </h3>
+              <p className="text-sm text-brand-charcoal/60 max-w-sm mx-auto">
+                La secretaría está vacía. Puedes dar de alta un alumno o restaurar la semilla inicial de ejemplo.
+              </p>
+            </div>
+          ) : filtrados.length === 0 ? (
+            <div className="bg-brand-paper rounded-2xl p-10 border border-brand-border text-center space-y-2">
+              <p className="font-medium text-brand-navy">Ningún alumno coincide con los filtros</p>
+              <p className="text-xs text-brand-charcoal/60">
+                Prueba a limpiar la búsqueda o cambiar el instrumento seleccionado.
+              </p>
+              <button
+                onClick={() => { setBusqueda(""); setFiltroInstrumento("todos"); setFiltroEstado("todos"); }}
+                className="text-xs text-brand-mustard font-bold underline mt-2 inline-block"
+              >
+                Restablecer filtros
+              </button>
+            </div>
+          ) : (
+            <div className="bg-brand-paper rounded-2xl border border-brand-border shadow-xs overflow-hidden divide-y divide-brand-border/60">
+              {filtrados.map(alumno => {
+                const edad = calcularEdad(alumno.fechaNacimiento);
+                const esMenor = edad < 18;
+
+                return (
+                  <div key={alumno.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-brand-cream/30 transition">
+                    
+                    {/* Datos del alumno */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-base text-brand-navy">
+                          {alumno.nombre} {alumno.apellido}
+                        </span>
+                        
+                        {/* Badge de edad */}
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-subtle text-brand-charcoal/70">
+                          {edad} años {esMenor && '· Menor'}
+                        </span>
+
+                        {/* Badge de estado */}
+                        <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                          alumno.estado === 'Activo'
+                            ? 'bg-brand-navy text-brand-paper'
+                            : alumno.estado === 'Congelado'
+                              ? 'bg-brand-mustard text-brand-navy'
+                              : 'bg-brand-charcoal/20 text-brand-charcoal/70'
+                        }`}>
+                          {alumno.estado}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-brand-charcoal/70 flex flex-wrap gap-x-3 gap-y-1">
+                        <span className="font-semibold text-brand-navy">
+                          ♫ {alumno.instrumento}
+                        </span>
+                        <span>
+                          🗓 {alumno.dia} a las {alumno.hora} hs
+                        </span>
+                        <span className="text-brand-charcoal/50">
+                          ✉ {alumno.correo}
+                        </span>
+                      </div>
+
+                      {esMenor && alumno.adultoResponsable && (
+                        <p className="text-xs text-brand-charcoal/60 italic">
+                          Tutor/a: {alumno.adultoResponsable}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Acciones y cambio rápido de estado */}
+                    <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-0 border-brand-border/40">
+                      
+                      {/* Selector de estado rápido */}
+                      <select
+                        value={alumno.estado}
+                        onChange={(e) => onCambiarEstado(alumno, e.target.value)}
+                        className="text-xs font-semibold px-2 py-1.5 rounded-lg border border-brand-border bg-brand-paper text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-mustard"
+                      >
+                        <option value="Activo">Activo</option>
+                        <option value="Congelado">Congelado</option>
+                        <option value="Retirado">Retirado</option>
+                      </select>
+
+                      {/* Botón Editar */}
+                      <button
+                        onClick={() => onEditar(alumno)}
+                        title="Editar ficha"
+                        className="p-1.5 rounded-lg text-brand-charcoal/70 hover:text-brand-navy hover:bg-brand-subtle transition"
+                      >
+                        <i data-lucide="edit-3" className="w-4 h-4"></i>
+                      </button>
+
+                      {/* Botón Borrar */}
+                      <button
+                        onClick={() => onBorrar(alumno)}
+                        title="Borrar ficha"
+                        className="p-1.5 rounded-lg text-brand-charcoal/70 hover:text-brand-rust hover:bg-brand-rust/10 transition"
+                      >
+                        <i data-lucide="trash-2" className="w-4 h-4"></i>
+                      </button>
+
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // ==========================================================================
+    // PANTALLA 4: FICHA DE ALUMNO (ALTA Y EDICIÓN)
+    // Con regla de los 18 años y validación estricta de cupos
+    // ==========================================================================
+    function VistaFormulario({ alumnoEditando, alumnosExistentes, onGuardar, onCancelar }) {
+      const [nombre, setNombre] = useState(alumnoEditando ? alumnoEditando.nombre : "");
+      const [apellido, setApellido] = useState(alumnoEditando ? alumnoEditando.apellido : "");
+      const [fechaNacimiento, setFechaNacimiento] = useState(alumnoEditando ? alumnoEditando.fechaNacimiento : "");
+      const [adultoResponsable, setAdultoResponsable] = useState(alumnoEditando ? (alumnoEditando.adultoResponsable || "") : "");
+      const [correo, setCorreo] = useState(alumnoEditando ? alumnoEditando.correo : "");
+      const [instrumento, setInstrumento] = useState(alumnoEditando ? alumnoEditando.instrumento : "Piano");
+      const [dia, setDia] = useState(alumnoEditando ? alumnoEditando.dia : "Lunes");
+      const [hora, setHora] = useState(alumnoEditando ? alumnoEditando.hora : "15:00");
+      const [estado, setEstado] = useState(alumnoEditando ? alumnoEditando.estado : "Activo");
+
+      const [errorMensaje, setErrorMensaje] = useState("");
+
+      // Generador automático de correo oficial example.com a partir de nombre y apellido
+      function generarCorreoSugerido(nom, ape) {
+        if (!nom || !ape) return "";
+        const clean = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const cNom = clean(nom.trim());
+        const cApe = clean(ape.trim());
+        if (!cNom || !cApe) return "";
+        return `${cNom}.${cApe}@example.com`;
+      }
+
+      function handleNombreChange(val) {
+        // Si Chrome o el usuario autocompleta el nombre completo (ej: "Begoña Garjón Hernández")
+        const trimmed = val.trim();
+        const primerEspacio = trimmed.indexOf(" ");
+        if (primerEspacio > 0 && !apellido) {
+          const primerNombre = trimmed.slice(0, primerEspacio);
+          const restoApellidos = trimmed.slice(primerEspacio + 1);
+          setNombre(primerNombre);
+          setApellido(restoApellidos);
+          if (!alumnoEditando && (!correo || correo.endsWith("@example.com"))) {
+            const sug = generarCorreoSugerido(primerNombre, restoApellidos);
+            if (sug) setCorreo(sug);
+          }
+          return;
+        }
+
+        setNombre(val);
+        // Autocompletar el correo si estamos en alta y el correo está vacío o es un example.com previo
+        if (!alumnoEditando && (!correo || correo.endsWith("@example.com"))) {
+          const sug = generarCorreoSugerido(val, apellido);
+          if (sug) setCorreo(sug);
+        }
+      }
+
+      function handleApellidoChange(val) {
+        setApellido(val);
+        // Autocompletar el correo si estamos en alta y el correo está vacío o es un example.com previo
+        if (!alumnoEditando && (!correo || correo.endsWith("@example.com"))) {
+          const sug = generarCorreoSugerido(nombre, val);
+          if (sug) setCorreo(sug);
+        }
+      }
+
+      // Cálculo de edad dinámico
+      const edad = useMemo(() => calcularEdad(fechaNacimiento), [fechaNacimiento]);
+      const esMenor = fechaNacimiento ? edad < 18 : false;
+
+      // Horarios disponibles para el día seleccionado
+      const horariosDisponibles = useMemo(() => getHorariosPorDia(dia), [dia]);
+
+      // Si cambia el día y la hora actual no existe en el nuevo día, ajustar al primer slot
+      useEffect(() => {
+        if (!horariosDisponibles.includes(hora)) {
+          setHora(horariosDisponibles[0]);
+        }
+      }, [dia]);
+
+      // Cupo actual del instrumento elegido
+      const cupoInfo = useMemo(() => {
+        const inst = INSTRUMENTOS.find(i => i.nombre === instrumento);
+        if (!inst) return { libres: 0, lleno: true };
+        
+        // Excluimos al alumno actual si estamos editando y ya estaba ocupando plaza en este instrumento
+        const ocupados = alumnosExistentes.filter(a => {
+          if (alumnoEditando && a.id === alumnoEditando.id) return false;
+          return a.instrumento === instrumento && (a.estado === 'Activo' || a.estado === 'Congelado');
+        }).length;
+
+        const libres = Math.max(0, inst.cupo - ocupados);
+        return {
+          total: inst.cupo,
+          ocupados,
+          libres,
+          lleno: libres === 0,
+          mensualidad: inst.mensualidad
+        };
+      }, [instrumento, alumnosExistentes, alumnoEditando]);
+
+      function handleSubmit(e) {
+        e.preventDefault();
+        setErrorMensaje("");
+
+        const nom = nombre.trim();
+        const ape = apellido.trim();
+        const mail = correo.trim().toLowerCase();
+
+        if (!nom || !ape) {
+          setErrorMensaje("Por favor, ingresa el nombre y apellido del alumno.");
+          return;
+        }
+
+        if (!fechaNacimiento) {
+          setErrorMensaje("Por favor, indica la fecha de nacimiento.");
+          return;
+        }
+
+        // CRITERIO 2: Menores de 18 exigen adulto responsable
+        if (esMenor && !adultoResponsable.trim()) {
+          setErrorMensaje("Al ser menor de 18 años, es obligatorio indicar a la persona adulta responsable.");
+          return;
+        }
+
+        if (!mail || !mail.includes('@')) {
+          setErrorMensaje("Ingresa un correo electrónico válido (ejemplo: nombre@example.com).");
+          return;
+        }
+
+        // Validación de correo duplicado
+        const duplicado = alumnosExistentes.find(a => {
+          if (alumnoEditando && a.id === alumnoEditando.id) return false;
+          return a.correo.trim().toLowerCase() === mail;
+        });
+        if (duplicado) {
+          setErrorMensaje(`Ya existe una ficha registrada con el correo ${mail}.`);
+          return;
+        }
+
+        // CRITERIO 3 & 6: Con cupo cero no se puede guardar como Activo ni reactivar
+        if ((estado === 'Activo' || estado === 'Congelado') && cupoInfo.lleno) {
+          setErrorMensaje("No queda cupo en este instrumento.");
+          return;
+        }
+
+        onGuardar({
+          nombre: nom,
+          apellido: ape,
+          fechaNacimiento,
+          adultoResponsable: esMenor ? adultoResponsable.trim() : null,
+          correo: mail,
+          instrumento,
+          dia,
+          hora,
+          estado
+        });
+      }
+
+      return (
+        <div className="max-w-2xl mx-auto space-y-6">
+          
+          <div className="border-b border-brand-border pb-3 flex items-center justify-between">
+            <div>
+              <h2 className="font-music font-bold text-2xl text-brand-navy">
+                {alumnoEditando ? `Editar ficha: ${alumnoEditando.nombre} ${alumnoEditando.apellido}` : "Nueva Ficha de Alumno"}
+              </h2>
+              <p className="text-xs text-brand-charcoal/60 mt-0.5">
+                {alumnoEditando ? "Actualiza los datos del alumno y su estado" : "Completa la ficha para registrar al estudiante"}
+              </p>
+            </div>
+            {alumnoEditando && (
+              <span className="text-xs bg-brand-subtle px-2.5 py-1 rounded-md text-brand-navy font-semibold">
+                Alta: {alumnoEditando.fechaAlta}
+              </span>
+            )}
+          </div>
+
+          {/* ALERTA DE ERROR */}
+          {errorMensaje && (
+            <div className="p-3.5 rounded-xl bg-brand-rust/10 border border-brand-rust/30 text-brand-rust text-sm font-semibold flex items-center gap-2 animate-modal">
+              <i data-lucide="alert-circle" className="w-4 h-4 shrink-0"></i>
+              <span>{errorMensaje}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="bg-brand-paper rounded-2xl p-6 border border-brand-border shadow-xs space-y-5">
+            
+            {/* DATOS PERSONALES */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="input-nombre" className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                  Nombre
+                </label>
+                <input
+                  id="input-nombre"
+                  name="given-name"
+                  autoComplete="name given-name"
+                  type="text"
+                  required
+                  value={nombre}
+                  onInput={(e) => handleNombreChange(e.target.value)}
+                  onChange={(e) => handleNombreChange(e.target.value)}
+                  placeholder="Ej: Amaro"
+                  className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="input-apellido" className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                  Apellido
+                </label>
+                <input
+                  id="input-apellido"
+                  name="family-name"
+                  autoComplete="family-name additional-name"
+                  type="text"
+                  required
+                  value={apellido}
+                  onInput={(e) => handleApellidoChange(e.target.value)}
+                  onChange={(e) => handleApellidoChange(e.target.value)}
+                  placeholder="Ej: Gómez"
+                  className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                />
+              </div>
+            </div>
+
+            {/* FECHA DE NACIMIENTO Y CORREO ELECTRÓNICO */}
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="input-fechaNac" className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                    Fecha de nacimiento
+                  </label>
+                  <input
+                    id="input-fechaNac"
+                    name="bday"
+                    autoComplete="bday"
+                    type="date"
+                    required
+                    value={fechaNacimiento}
+                    onChange={(e) => setFechaNacimiento(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                  />
+                  {fechaNacimiento && (
+                    <p className="text-xs text-brand-charcoal/60 mt-1">
+                      Edad calculada: <strong>{edad} años</strong> {esMenor ? '(menor de edad)' : '(adulto)'}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="input-correo" className="text-xs font-bold uppercase tracking-wider text-brand-navy">
+                      Correo electrónico
+                    </label>
+                    {nombre && apellido && (
+                      <button
+                        type="button"
+                        onClick={() => setCorreo(generarCorreoSugerido(nombre, apellido))}
+                        className="text-[11px] text-brand-mustard hover:text-brand-navy font-bold underline transition"
+                        title="Rellenar automáticamente como nombre.apellido@example.com"
+                      >
+                        Auto-generar correo
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="input-correo"
+                    name="email"
+                    autoComplete="email"
+                    type="email"
+                    required
+                    value={correo}
+                    onChange={(e) => setCorreo(e.target.value)}
+                    placeholder="amaro.gomez@example.com"
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                  />
+                </div>
+              </div>
+
+              {/* CAMPO CONDICIONAL DE ADULTO RESPONSABLE (Criterio 2) */}
+              {esMenor && (
+                <div className="p-3.5 rounded-xl bg-brand-mustard/15 border border-brand-mustard/40 space-y-1.5 animate-modal">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-brand-navy">
+                    <i data-lucide="shield-check" className="w-4 h-4 text-brand-mustard"></i>
+                    <span>Persona adulta responsable (Obligatorio para menores de 18 años)</span>
+                  </div>
+                  <input
+                    id="input-adulto"
+                    name="name"
+                    autoComplete="name"
+                    type="text"
+                    required={esMenor}
+                    value={adultoResponsable}
+                    onChange={(e) => setAdultoResponsable(e.target.value)}
+                    placeholder="Nombre y apellido de la madre, padre o tutor…"
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-paper text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                  />
+                  <p className="text-[11px] text-brand-charcoal/60">
+                    Requerido para comunicaciones oficiales y retiros de la escuela.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* SELECCIÓN DE INSTRUMENTO Y CONTROL DE CUPOS */}
+            <div className="pt-2 border-t border-brand-border/60 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-brand-navy">
+                    Instrumento
+                  </label>
+                  <span className="text-xs text-brand-charcoal/60 font-music">
+                    {cupoInfo.libres} lugares disponibles ({formatCLP(cupoInfo.mensualidad)}/mes)
+                  </span>
+                </div>
+                <select
+                  value={instrumento}
+                  onChange={(e) => setInstrumento(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-brand-border bg-brand-cream/30 text-sm font-semibold text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                >
+                  {INSTRUMENTOS.map(i => {
+                    const ocupados = alumnosExistentes.filter(a => {
+                      if (alumnoEditando && a.id === alumnoEditando.id) return false;
+                      return a.instrumento === i.nombre && (a.estado === 'Activo' || a.estado === 'Congelado');
+                    }).length;
+                    const libres = Math.max(0, i.cupo - ocupados);
+                    return (
+                      <option key={i.id} value={i.nombre}>
+                        {i.nombre} — {libres === 0 ? '⛔ SIN CUPO (Lleno)' : `Quedan ${libres} de ${i.cupo} lugares`}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Aviso visual inmediato sobre el cupo */}
+                {cupoInfo.lleno ? (
+                  <p className="text-xs text-brand-rust font-bold mt-1.5 flex items-center gap-1">
+                    <i data-lucide="alert-octagon" className="w-3.5 h-3.5"></i>
+                    Instrumento lleno ({cupoInfo.total} de {cupoInfo.total}). No se puede guardar como Activo.
+                  </p>
+                ) : cupoInfo.libres <= 3 ? (
+                  <p className="text-xs text-brand-mustard font-semibold mt-1 flex items-center gap-1">
+                    <i data-lucide="alert-triangle" className="w-3.5 h-3.5"></i>
+                    ¡Atención! Quedan solo {cupoInfo.libres} lugares en este instrumento.
+                  </p>
+                ) : null}
+              </div>
+
+              {/* DÍA Y HORA (Slots exactos de 45 min) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                    Día de clase
+                  </label>
+                  <select
+                    value={dia}
+                    onChange={(e) => setDia(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                  >
+                    {DIAS_SEMANA.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-brand-charcoal/50 mt-1">
+                    {dia === 'Sábado' ? 'Horario de sábados: 9:30 a 13:30' : 'Horario lun-vie: 15:00 a 21:00'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                    Hora (45 minutos)
+                  </label>
+                  <select
+                    value={hora}
+                    onChange={(e) => setHora(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-brand-cream/30 text-sm font-semibold text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-mustard"
+                  >
+                    {horariosDisponibles.map(h => (
+                      <option key={h} value={h}>{h} hs</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ESTADO */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                  Estado de la ficha
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Activo', 'Congelado', 'Retirado'].map(st => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setEstado(st)}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold border transition ${
+                        estado === st
+                          ? st === 'Activo'
+                            ? 'bg-brand-navy text-brand-paper border-brand-navy shadow-xs'
+                            : st === 'Congelado'
+                              ? 'bg-brand-mustard text-brand-navy border-brand-mustard shadow-xs'
+                              : 'bg-brand-charcoal text-white border-brand-charcoal'
+                          : 'bg-brand-cream/40 text-brand-charcoal/70 border-brand-border hover:bg-brand-subtle'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-brand-charcoal/50 mt-1.5">
+                  {estado === 'Activo' && 'Ocupa cupo y suma a la facturación mensual.'}
+                  {estado === 'Congelado' && 'Conserva el cupo reservado pero NO suma al cobro mensual ($ 0).'}
+                  {estado === 'Retirado' && 'Libera el cupo del instrumento de inmediato.'}
+                </p>
+              </div>
+
+            </div>
+
+            {/* BOTONES DE ACCIÓN */}
+            <div className="pt-4 border-t border-brand-border/60 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-brand-charcoal/70 hover:bg-brand-subtle transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-lg bg-brand-navy text-brand-paper font-bold text-sm hover:brightness-110 active:scale-98 transition shadow-sm flex items-center gap-2"
+              >
+                <i data-lucide="check" className="w-4 h-4 text-brand-mustard"></i>
+                <span>{alumnoEditando ? "Guardar cambios" : "Guardar ficha"}</span>
+              </button>
+            </div>
+
+          </form>
+
+        </div>
+      );
+    }
+
+    // Renderizado en el DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
